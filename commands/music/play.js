@@ -1,9 +1,7 @@
-const playdl = require('play-dl');
-const { debugPlayDl } = require('../../preload');
-
+// commands/music/play.js
 module.exports = {
   name: 'play',
-  description: 'Toca uma música do YouTube',
+  description: 'Toca uma música do YouTube, Spotify ou SoundCloud',
   aliases: ['p'],
   category: 'Music',
   usage: '<url ou nome da música>',
@@ -34,58 +32,53 @@ module.exports = {
       // Log de diagnóstico
       console.log('Query recebida:', query);
       
-      // Tentar validar e encontrar URL
-      let videoUrl = query;
-      
-      // Se não for uma URL válida, fazer busca
-      if (!playdl.yt_validate(query)) {
-        console.log('Realizando busca no YouTube');
-        const searchResults = await playdl.search(query, { limit: 1 });
-        
-        if (searchResults.length === 0) {
-          return message.reply('❌ Nenhuma música encontrada.');
+      // Verificar se o cliente tem o DisTube
+      if (!client.distube) {
+        console.error('DisTube não encontrado, verificando alternativas...');
+        // Tentar reinicializar o DisTube se possível
+        try {
+          const setupMusicSystem = require('../../helpers/musicSystem');
+          client.distube = setupMusicSystem(client);
+          if (!client.distube) {
+            return message.reply('❌ Sistema de música não está funcionando corretamente. Reinicie o bot.');
+          }
+        } catch (err) {
+          console.error('Erro ao tentar reinicializar o DisTube:', err);
+          return message.reply('❌ Sistema de música não está funcionando corretamente. Reinicie o bot.');
         }
-        
-        videoUrl = searchResults[0].url;
-        console.log('URL encontrada:', videoUrl);
       }
       
-      // Diagnóstico adicional
-      await debugPlayDl(videoUrl);
-      
-      // Usar o musicManager do cliente
-      const musicManager = client.musicManager;
-      
-      if (!musicManager) {
-        return message.reply('❌ Sistema de música não está funcionando corretamente.');
-      }
-      
-      // Responder com mensagem de carregamento
+      // Mensagem de carregamento
       const loadingMsg = await message.reply('🔍 Buscando música...');
       
-      // Criar um objeto de interação para compatibilidade 
-      const interaction = {
-        guild: message.guild,
-        channel: message.channel,
-        member: message.member,
-        user: message.author,
-        followUp: async (content) => {
-          if (typeof content === 'string') {
-            await loadingMsg.edit(content);
-          } else {
-            await loadingMsg.edit({ content: null, ...content });
-          }
-        },
-        reply: async (content) => {
-          await loadingMsg.edit(content);
+      // Tocar a música usando DisTube com tratamento de erro aprimorado
+      try {
+        // A principal mudança para v5 - garantindo que estamos usando a API correta
+        await client.distube.play(voiceChannel, query, {
+          member: message.member,
+          textChannel: message.channel,
+          // Na v5, é melhor explicitar o canal de texto para mensagens
+          // para evitar problemas com o erro getString
+        });
+        
+        // Atualizar mensagem de carregamento
+        await loadingMsg.edit('✅ Música encontrada e adicionada à fila!');
+        
+      } catch (playError) {
+        console.error('Erro específico ao tocar música:', playError);
+        
+        if (playError.message && playError.message.includes('No result')) {
+          await loadingMsg.edit('❌ Nenhum resultado encontrado para sua busca.');
+        } else if (playError.message && playError.message.includes('Sign in')) {
+          await loadingMsg.edit('❌ Esta música requer login no YouTube. Tente outra música.');
+        } else if (playError.message && playError.message.includes('age-restricted')) {
+          await loadingMsg.edit('❌ Este conteúdo tem restrição de idade no YouTube.');
+        } else {
+          await loadingMsg.edit(`❌ Erro ao reproduzir: ${playError.message || 'Erro desconhecido'}`);
         }
-      };
-      
-      // Adicionar música à fila
-      await musicManager.addSong(interaction, videoUrl);
-      
+      }
     } catch (error) {
-      console.error('Erro detalhado no comando play:', error);
+      console.error('Erro geral ao executar comando play:', error);
       message.reply(`❌ Ocorreu um erro: ${error.message || 'Erro desconhecido'}`);
     }
   }

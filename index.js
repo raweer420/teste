@@ -1,11 +1,9 @@
-// Esta deve ser a primeira linha do arquivo
-require('./preload');
 const { Client, GatewayIntentBits, Partials, Collection } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const config = require('./config');
-const setupMusicManager = require('./helpers/musicPlayerDirect');
-const { setupPlayDl } = require('./preload');
+const setupMusicSystem = require('./helpers/musicSystem');
+const { setupPlayDl } = require('./preload'); // Carregar o setup do play-dl
 
 // Função para mostrar uma mensagem bonita de inicialização
 function showStartupMessage() {
@@ -32,24 +30,21 @@ const client = new Client({
     GatewayIntentBits.DirectMessages
   ],
   partials: [Partials.Message, Partials.Channel, Partials.Reaction],
-  // Adicionar opções de otimização
   sweepers: {
     messages: {
-      interval: 60, // 1 minuto
-      lifetime: 3600 // 1 hora
+      interval: 60,
+      lifetime: 3600
     }
   },
-  restTimeOffset: 0 // Reduzir tempo de espera entre requisições à API
+  restTimeOffset: 0
 });
 
-// Coleções para armazenar comandos e cooldowns
 client.commands = new Collection();
 client.cooldowns = new Collection();
 
-// Mostrar mensagem de inicialização
 showStartupMessage();
 
-// Função para verificar se o usuário tem o cargo NUKE_ROLE_ID
+// Verifica se o autor da mensagem tem permissão para usar comandos administrativos
 function checkPermission(message) {
   if (!message.guild) return false;
   if (message.guild.ownerId === message.author.id) return true;
@@ -66,7 +61,7 @@ for (const file of eventFiles) {
     const filePath = path.join(eventsPath, file);
     const event = require(filePath);
     const eventName = event.name || file.split('.')[0];
-    
+
     if (event.execute) {
       if (event.once) {
         client.once(eventName, (...args) => event.execute(client, ...args));
@@ -88,15 +83,15 @@ const commandFolders = fs.readdirSync(commandsPath);
 for (const folder of commandFolders) {
   const folderPath = path.join(commandsPath, folder);
   if (!fs.existsSync(folderPath) || !fs.statSync(folderPath).isDirectory()) continue;
-  
+
   const commandFiles = fs.readdirSync(folderPath).filter(file => file.endsWith('.js'));
   console.log(`Comandos na pasta ${folder}: ${commandFiles.join(', ')}`);
-  
+
   for (const file of commandFiles) {
     try {
       const filePath = path.join(folderPath, file);
       const command = require(filePath);
-      
+
       if (command.name) {
         command.category = folder.charAt(0).toUpperCase() + folder.slice(1);
         client.commands.set(command.name, command);
@@ -110,24 +105,21 @@ for (const folder of commandFolders) {
 
 // Sistema de comandos
 client.on('messageCreate', async message => {
-  // Ignorar mensagens que não começam com o prefixo ou são de bots
   if (!message.content.startsWith(config.PREFIX) || message.author.bot) return;
 
   const args = message.content.slice(config.PREFIX.length).trim().split(/ +/);
   const commandName = args.shift().toLowerCase();
 
-  const command = client.commands.get(commandName) || 
-                 client.commands.find(cmd => cmd.aliases && cmd.aliases.includes(commandName));
+  const command = client.commands.get(commandName) ||
+    client.commands.find(cmd => cmd.aliases && cmd.aliases.includes(commandName));
 
   if (!command) return;
 
-  // Verificar permissões
   if (!['music', 'utility'].includes(command.category.toLowerCase()) && !checkPermission(message)) {
     return message.reply('❌ Você não tem permissão para usar comandos de administração.')
-      .then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
+      .then(msg => setTimeout(() => msg.delete().catch(() => { }), 5000));
   }
 
-  // Sistema de cooldown
   const { cooldowns } = client;
   if (!cooldowns.has(command.name)) {
     cooldowns.set(command.name, new Collection());
@@ -143,25 +135,24 @@ client.on('messageCreate', async message => {
     if (now < expirationTime) {
       const timeLeft = (expirationTime - now) / 1000;
       return message.reply(`⏱️ Aguarde ${timeLeft.toFixed(1)} segundos antes de usar o comando \`${command.name}\` novamente.`)
-        .then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
+        .then(msg => setTimeout(() => msg.delete().catch(() => { }), 5000));
     }
   }
 
   timestamps.set(message.author.id, now);
   setTimeout(() => timestamps.delete(message.author.id), cooldownAmount);
 
-  // Executar comando com try/catch para evitar quedas
   try {
     console.log(`🔄 Executando comando: ${command.name} (Usuário: ${message.author.tag})`);
     await command.execute(message, args, client);
   } catch (error) {
     console.error(`Erro no comando ${command.name}:`, error);
     message.reply('❌ Ocorreu um erro ao executar este comando.')
-      .then(msg => setTimeout(() => msg.delete().catch(() => {}), 5000));
+      .then(msg => setTimeout(() => msg.delete().catch(() => { }), 5000));
   }
 });
 
-// Evento para testar o bot (comando direto)
+// Teste de resposta
 client.on('messageCreate', message => {
   if (message.content === '!!teste') {
     const pingMs = Date.now() - message.createdTimestamp;
@@ -169,50 +160,45 @@ client.on('messageCreate', message => {
   }
 });
 
-// Evento ready do bot
+// Quando o bot estiver pronto
 client.once('ready', async () => {
   console.log(`✅ Bot conectado como ${client.user.tag}`);
-  
-  // Configurar play-dl primeiro
+
+  // Configurar o play-dl (FFmpeg, yt-dlp, user-agent)
   await setupPlayDl();
 
-  // Definir status do bot
   client.user.setActivity('música | !help', { type: 'LISTENING' });
-  
-  // Inicializar o sistema de música com play-dl
-  console.log('🎵 Inicializando sistema de música com play-dl...');
+
+  // Iniciar sistema de música
+  console.log('🎵 Inicializando sistema de música DisTube...');
   try {
-    const musicManager = setupMusicManager(client);
-    if (musicManager) {
-      client.musicManager = musicManager;
-      console.log('✅ Sistema de música inicializado com sucesso!');
+    const distube = setupMusicSystem(client);
+    if (distube) {
+      console.log('✅ Sistema de música DisTube inicializado com sucesso!');
     } else {
-      console.error('❌ Falha ao inicializar o sistema de música.');
+      console.error('❌ Falha ao inicializar o sistema de música DisTube.');
     }
   } catch (error) {
-    console.error('❌ Erro ao configurar sistema de música:', error);
+    console.error('❌ Erro ao configurar sistema de música DisTube:', error);
   }
-  
-  // Tentar enviar mensagem no canal de logs
+
+  // Enviar mensagem no canal de logs
   try {
     const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID);
     if (logChannel) {
-      logChannel.send({
+      await logChannel.send({
         embeds: [{
           title: '🟢 Bot Iniciado',
           description: `Bot foi iniciado com sucesso em ${new Date().toLocaleString()}`,
           color: 0x00FF00,
           fields: [
-            { name: '🎵 Sistema de Música', value: 'Ativado', inline: true },
+            { name: '🎵 Sistema de Música', value: 'DisTube Ativado', inline: true },
             { name: '📝 Sistema de Logs', value: 'Ativado', inline: true },
             { name: '✅ Sistema de Verificação', value: 'Ativado', inline: true }
           ]
         }]
-      }).then(() => {
-        console.log('✅ Mensagem enviada ao canal de logs');
-      }).catch(error => {
-        console.error('❌ Erro ao enviar mensagem para o canal de logs:', error);
       });
+      console.log('✅ Mensagem enviada ao canal de logs');
     } else {
       console.error('❌ Canal de logs não encontrado!');
     }
@@ -221,12 +207,12 @@ client.once('ready', async () => {
   }
 });
 
-// Lidar com erros não tratados
+// Erros não tratados
 process.on('unhandledRejection', error => {
   console.error('Erro não tratado:', error);
 });
 
-// Login do bot
+// Login
 console.log('Conectando ao Discord...');
 client.login(config.TOKEN).then(() => {
   console.log('✅ Bot conectado ao Discord com sucesso!');

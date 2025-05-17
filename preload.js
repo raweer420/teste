@@ -3,21 +3,29 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 const playdl = require('play-dl');
 
-// Configurar FFmpeg
+// Caminhos dos binários e do cookie
 const ffmpegPath = path.join(__dirname, 'ffmpeg', 'ffmpeg.exe');
 const ytdlpPath = path.join(__dirname, 'ffmpeg', 'yt-dlp.exe');
+const cookiePath = path.join(__dirname, 'youtube_cookies.txt');
 
 // Função para configurar play-dl
 async function setupPlayDl() {
   try {
-    // Configurar user agent
-    playdl.setToken({
-      youtube: {
-        useragent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
-      }
-    });
+    // Verifica se o arquivo de cookie existe
+    if (fs.existsSync(cookiePath)) {
+      const cookieData = fs.readFileSync(cookiePath, 'utf-8');
 
-    console.log('✅ play-dl configurado com sucesso');
+      await playdl.setToken({
+        youtube: {
+          cookie: cookieData,
+          useragent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+        }
+      });
+
+      console.log('✅ Cookie do YouTube carregado com sucesso!');
+    } else {
+      console.warn('⚠️ Arquivo de cookie do YouTube não encontrado. Algumas músicas podem não funcionar.');
+    }
   } catch (error) {
     console.error('❌ Erro na configuração do play-dl:', error);
   }
@@ -36,8 +44,7 @@ if (fs.existsSync(ffmpegPath)) {
 if (fs.existsSync(ytdlpPath)) {
   console.log(`✅ yt-dlp encontrado em: ${ytdlpPath}`);
   process.env.YTDLP_PATH = ytdlpPath;
-  
-  // Tentar atualizar yt-dlp (opcional)
+
   try {
     console.log('Atualizando yt-dlp...');
     execSync(`"${ytdlpPath}" -U`, { stdio: 'inherit' });
@@ -53,28 +60,25 @@ if (fs.existsSync(ytdlpPath)) {
 async function debugPlayDl(url) {
   try {
     console.log('🔍 Iniciando diagnóstico de URL:', url);
-    
-    // Validar URL
+
     const validateResult = playdl.yt_validate(url);
     console.log('Resultado da validação:', validateResult);
 
-    // Obter informações do vídeo
     const videoInfo = await playdl.video_info(url);
     console.log('Informações do vídeo:', {
       title: videoInfo.video_details.title,
       url: videoInfo.video_details.url
     });
 
-    // Tentar criar stream
-    const stream = await playdl.stream(url, { 
-      discordPlayerCompatibility: true 
+    const stream = await playdl.stream(url, {
+      discordPlayerCompatibility: true
     });
-    
+
     console.log('Stream criado com sucesso');
     console.log('Tipo de stream:', stream.type);
   } catch (error) {
     console.error('❌ Erro detalhado:', error);
-    throw error; // Relanças o erro para tratamento adicional
+    throw error;
   }
 }
 

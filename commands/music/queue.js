@@ -1,46 +1,48 @@
 // commands/music/queue.js
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('queue')
-    .setDescription('Mostra a fila de músicas atual'),
+  name: 'queue',
+  description: 'Mostra a fila de músicas atual',
+  aliases: ['q', 'fila'],
+  category: 'Music',
   
-  async execute(interaction) {
+  async execute(message, args, client) {
+    // Verificar se o usuário está em um canal de voz
+    const voiceChannel = message.member.voice.channel;
+    if (!voiceChannel) {
+      return message.reply('❌ Você precisa estar em um canal de voz para usar este comando!');
+    }
+    
+    // Verificar se o cliente tem o DisTube
+    if (!client.distube) {
+      return message.reply('❌ Sistema de música não está funcionando corretamente.');
+    }
+    
+    // Obter a fila do servidor
+    const queue = client.distube.getQueue(message.guildId);
+    if (!queue || queue.songs.length === 0) {
+      return message.reply('❌ Não há músicas na fila!');
+    }
+    
     try {
-      // Usar o novo musicManager em vez do distube
-      const musicManager = interaction.client.musicManager;
-      
-      if (!musicManager) {
-        return await interaction.reply('❌ Sistema de música não está funcionando corretamente.');
-      }
-      
-      const guildId = interaction.guild.id;
-      const queue = musicManager.getQueue(guildId);
-      
-      if (!queue || (!queue.playing && queue.songs.length === 0)) {
-        return await interaction.reply('❌ Não há músicas na fila!');
-      }
-      
       // Criar embed para a fila
       const embed = new EmbedBuilder()
         .setTitle('🎵 Fila de Músicas')
         .setColor('#3498db');
       
       // Música atual
-      const currentSong = musicManager.getNowPlaying(guildId);
-      if (currentSong) {
-        embed.addFields({
-          name: '🎧 Tocando agora',
-          value: `**${currentSong.title}** - \`${musicManager.formatDuration(currentSong.duration)}\` - Pedido por: ${currentSong.requestedBy}`
-        });
-      }
+      const currentSong = queue.songs[0];
+      embed.addFields({
+        name: '🎧 Tocando agora',
+        value: `**${currentSong.name}** - \`${currentSong.formattedDuration}\` - Pedido por: <@${currentSong.user.id}>`
+      });
       
       // Próximas músicas (até 10)
-      if (queue.songs.length > 0) {
+      if (queue.songs.length > 1) {
         const queueList = queue.songs
-          .slice(0, 10)
-          .map((song, index) => `${index + 1}. **${song.title}** - \`${musicManager.formatDuration(song.duration)}\` - Pedido por: ${song.requestedBy}`)
+          .slice(1, 11)
+          .map((song, index) => `${index + 1}. **${song.name}** - \`${song.formattedDuration}\` - Pedido por: <@${song.user.id}>`)
           .join('\n');
         
         embed.addFields({
@@ -49,27 +51,37 @@ module.exports = {
         });
         
         // Se houver mais músicas além das 10 mostradas
-        if (queue.songs.length > 10) {
+        if (queue.songs.length > 11) {
           embed.addFields({
             name: '📢 E mais...',
-            value: `Mais ${queue.songs.length - 10} músicas na fila`
+            value: `Mais ${queue.songs.length - 11} músicas na fila`
           });
         }
-      } else if (!currentSong) {
-        embed.setDescription('Não há músicas na fila');
       }
       
       // Informações adicionais
-      embed.addFields({
-        name: '🔄 Loop',
-        value: queue.loop ? 'Ativado' : 'Desativado',
-        inline: true
-      });
+      embed.addFields([
+        {
+          name: '🔄 Loop',
+          value: queue.repeatMode ? (queue.repeatMode === 1 ? 'Música atual' : 'Fila completa') : 'Desativado',
+          inline: true
+        },
+        {
+          name: '🔊 Volume',
+          value: `${queue.volume}%`,
+          inline: true
+        },
+        {
+          name: '⏱️ Tempo restante',
+          value: `\`${queue.formattedCurrentTime} / ${currentSong.formattedDuration}\``,
+          inline: true
+        }
+      ]);
       
-      await interaction.reply({ embeds: [embed] });
+      await message.reply({ embeds: [embed] });
     } catch (error) {
-      console.error('Erro ao executar comando queue:', error);
-      await interaction.reply(`❌ Ocorreu um erro: ${error.message || 'Erro desconhecido'}`);
+      console.error('Erro ao exibir fila:', error);
+      message.reply(`❌ Ocorreu um erro: ${error.message || 'Erro desconhecido'}`);
     }
   }
 };

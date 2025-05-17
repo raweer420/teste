@@ -1,21 +1,33 @@
 {
   "name": "defaultbot2",
   "version": "1.0.0",
-  "description": "",
+  "description": "Bot de Discord com sistema de música e moderação",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": [
+    "discord",
+    "bot",
+    "music",
+    "moderation"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@discord-player/extractor": "^7.1.0",
+    "@discordjs/opus": "^0.10.0",
     "@discordjs/voice": "^0.18.0",
+    "@distube/soundcloud": "^2.0.4",
+    "@distube/spotify": "^2.0.2",
+    "@distube/youtube": "^1.0.4",
+    "@distube/yt-dlp": "^2.0.1",
     "chalk": "^4.1.2",
     "discord-player": "^7.1.0",
     "discord.js": "^14.19.3",
+    "distube": "^5.0.7",
     "dotenv": "^16.5.0",
     "ffmpeg-static": "^5.2.0",
     "figlet": "^1.8.1",
@@ -26,5 +38,8 @@
     "ora": "^5.4.1",
     "play-dl": "^1.9.7",
     "table": "^6.9.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
   }
 }

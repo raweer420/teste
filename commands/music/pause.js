@@ -1,44 +1,45 @@
 // commands/music/pause.js
-const { SlashCommandBuilder } = require('discord.js');
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('pause')
-    .setDescription('Pausa ou retoma a reprodução da música atual'),
+  name: 'pause',
+  description: 'Pausa ou retoma a reprodução da música atual',
+  aliases: ['resume'],
+  category: 'Music',
+  cooldown: 2,
   
-  async execute(interaction) {
+  async execute(message, args, client) {
     // Verificar se o usuário está em um canal de voz
-    const voiceChannel = interaction.member.voice.channel;
+    const voiceChannel = message.member.voice.channel;
     if (!voiceChannel) {
-      return await interaction.reply('❌ Você precisa estar em um canal de voz para usar este comando!');
+      return message.reply('❌ Você precisa estar em um canal de voz para usar este comando!');
     }
     
     try {
-      // Usar o novo musicManager em vez do distube
-      const musicManager = interaction.client.musicManager;
+      // Usar o musicManager do cliente
+      const musicManager = client.musicManager;
       
       if (!musicManager) {
-        return await interaction.reply('❌ Sistema de música não está funcionando corretamente.');
+        return message.reply('❌ Sistema de música não está funcionando corretamente.');
       }
       
-      const guildId = interaction.guild.id;
+      const guildId = message.guild.id;
       const queue = musicManager.getQueue(guildId);
       
       if (!queue || !queue.playing) {
-        return await interaction.reply('❌ Não há nada tocando no momento!');
+        return message.reply('❌ Não há nada tocando no momento!');
       }
       
       // Pausar ou retomar
       const isPaused = musicManager.pause(guildId);
       
       if (isPaused) {
-        await interaction.reply('⏸️ Música pausada!');
+        await message.reply('⏸️ Música pausada!');
       } else {
-        await interaction.reply('▶️ Reprodução retomada!');
+        await message.reply('▶️ Reprodução retomada!');
       }
     } catch (error) {
       console.error('Erro ao executar comando pause:', error);
-      await interaction.reply(`❌ Ocorreu um erro: ${error.message || 'Erro desconhecido'}`);
+      message.reply(`❌ Ocorreu um erro: ${error.message || 'Erro desconhecido'}`);
     }
   }
 };
